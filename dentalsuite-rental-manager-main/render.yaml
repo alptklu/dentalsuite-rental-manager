@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: dentalsuite-rental-manager
+    env: node
+    plan: free
+    buildCommand: chmod +x build.sh && ./build.sh
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true
+    disk:
+      name: sqlite-data
+      mountPath: /opt/render/project/src/server/data
+      sizeGB: 1 
