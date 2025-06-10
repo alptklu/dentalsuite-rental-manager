@@ -232,15 +232,130 @@ router.get('/debug/users', async (req, res) => {
     const users = await dbAll('SELECT id, username, email, role, active, created_at FROM users');
     const adminUser = await dbGet('SELECT id, username, email, role, active, created_at FROM users WHERE role = "admin"');
     
+    // Check if password field exists and has values (without exposing passwords)
+    const usersWithPasswordCheck = await dbAll(`
+      SELECT 
+        id, 
+        username, 
+        email, 
+        role, 
+        active, 
+        created_at,
+        CASE WHEN password IS NULL THEN 'NULL' 
+             WHEN password = '' THEN 'EMPTY' 
+             ELSE 'EXISTS' 
+        END as password_status,
+        length(password) as password_length
+      FROM users
+    `);
+    
+    const adminWithPasswordCheck = await dbGet(`
+      SELECT 
+        id, 
+        username, 
+        email, 
+        role, 
+        active, 
+        created_at,
+        CASE WHEN password IS NULL THEN 'NULL' 
+             WHEN password = '' THEN 'EMPTY' 
+             ELSE 'EXISTS' 
+        END as password_status,
+        length(password) as password_length
+      FROM users WHERE role = "admin"
+    `);
+    
     res.json({
       message: 'Debug info',
       totalUsers: users.length,
       users: users,
+      usersWithPasswordCheck: usersWithPasswordCheck,
       adminUser: adminUser,
+      adminWithPasswordCheck: adminWithPasswordCheck,
       hasAdminUser: !!adminUser
     });
   } catch (error) {
     console.error('Debug users error:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// Debug endpoint to test password functionality (remove in production)
+router.post('/debug/password-test', async (req, res) => {
+  try {
+    const testPassword = 'admin123';
+    
+    // Hash the test password
+    const hashedPassword = await bcrypt.hash(testPassword, 10);
+    
+    // Test comparison
+    const isValid = await bcrypt.compare(testPassword, hashedPassword);
+    
+    // Get admin user's actual password hash
+    const adminUser = await dbGet('SELECT id, username, password FROM users WHERE role = "admin"');
+    
+    let adminPasswordTest = null;
+    if (adminUser && adminUser.password) {
+      adminPasswordTest = await bcrypt.compare(testPassword, adminUser.password);
+    }
+    
+    res.json({
+      message: 'Password debug test',
+      testPassword: testPassword,
+      hashedLength: hashedPassword.length,
+      hashTestPassed: isValid,
+      adminUser: adminUser ? {
+        id: adminUser.id,
+        username: adminUser.username,
+        hasPassword: !!adminUser.password,
+        passwordLength: adminUser.password ? adminUser.password.length : 0
+      } : null,
+      adminPasswordTest: adminPasswordTest,
+      bcryptVersion: 'bcryptjs'
+    });
+  } catch (error) {
+    console.error('Password debug error:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
+// Debug endpoint to recreate admin user (remove in production)
+router.post('/debug/recreate-admin', async (req, res) => {
+  try {
+    // Delete existing admin user if exists
+    await dbRun('DELETE FROM users WHERE username = "admin"');
+    
+    // Create new admin user
+    const hashedPassword = await bcrypt.hash('admin123', 10);
+    await dbRun(`
+      INSERT INTO users (username, email, password, role)
+      VALUES (?, ?, ?, ?)
+    `, ['admin', 'admin@dentalsuite.com', hashedPassword, 'admin']);
+    
+    // Verify creation
+    const newAdmin = await dbGet(`
+      SELECT 
+        id, 
+        username, 
+        email, 
+        role, 
+        active, 
+        created_at,
+        CASE WHEN password IS NULL THEN 'NULL' 
+             WHEN password = '' THEN 'EMPTY' 
+             ELSE 'EXISTS' 
+        END as password_status,
+        length(password) as password_length
+      FROM users WHERE username = "admin"
+    `);
+    
+    res.json({
+      message: 'Admin user recreated',
+      newAdmin: newAdmin,
+      success: !!newAdmin
+    });
+  } catch (error) {
+    console.error('Recreate admin error:', error);
     res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
