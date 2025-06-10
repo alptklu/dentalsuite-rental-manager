@@ -65,11 +65,33 @@ app.get('/api/health', (req, res) => {
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../dist')));
+  const distPath = path.join(__dirname, '../dist');
+  console.log('Looking for static files at:', distPath);
   
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
-  });
+  // Check if dist folder exists
+  try {
+    const fs = await import('fs');
+    if (fs.existsSync(distPath)) {
+      console.log('✅ dist folder found, serving static files');
+      app.use(express.static(distPath));
+      
+      app.get('*', (req, res) => {
+        const indexPath = path.join(distPath, 'index.html');
+        console.log('Serving index.html from:', indexPath);
+        
+        if (fs.existsSync(indexPath)) {
+          res.sendFile(indexPath);
+        } else {
+          console.error('❌ index.html not found at:', indexPath);
+          res.status(500).json({ message: 'Frontend build files not found' });
+        }
+      });
+    } else {
+      console.error('❌ dist folder not found at:', distPath);
+    }
+  } catch (error) {
+    console.error('Error checking dist folder:', error);
+  }
 }
 
 // Error handling middleware
