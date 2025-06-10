@@ -21,21 +21,35 @@ router.post('/login', [
 
     const { username, password } = req.body;
 
+    console.log('Login attempt for username:', username);
+
     // Find user
     const user = await dbGet(
       'SELECT * FROM users WHERE username = ? AND active = 1',
       [username]
     );
 
+    console.log('User found in database:', user ? 'Yes' : 'No');
+    if (user) {
+      console.log('User details:', { id: user.id, username: user.username, email: user.email, role: user.role });
+    }
+
     if (!user) {
+      console.log('No user found with username:', username);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     // Check password
+    console.log('Checking password...');
     const isValidPassword = await bcrypt.compare(password, user.password);
+    console.log('Password valid:', isValidPassword);
+    
     if (!isValidPassword) {
+      console.log('Password comparison failed for user:', username);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
+
+    console.log('Login successful for user:', username);
 
     // Generate tokens
     const { accessToken, refreshToken } = generateTokens(user.id);
@@ -209,6 +223,25 @@ router.get('/profile', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Get profile error:', error);
     res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Debug endpoint to check users (remove in production)
+router.get('/debug/users', async (req, res) => {
+  try {
+    const users = await dbAll('SELECT id, username, email, role, active, created_at FROM users');
+    const adminUser = await dbGet('SELECT id, username, email, role, active, created_at FROM users WHERE role = "admin"');
+    
+    res.json({
+      message: 'Debug info',
+      totalUsers: users.length,
+      users: users,
+      adminUser: adminUser,
+      hasAdminUser: !!adminUser
+    });
+  } catch (error) {
+    console.error('Debug users error:', error);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
 
