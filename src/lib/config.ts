@@ -1,14 +1,27 @@
 // Configuration file for environment variables
 
-// Detect if we're accessing via network IP
-const isNetworkAccess = window.location.hostname === '192.168.1.104';
-const apiBaseUrl = isNetworkAccess 
-  ? 'http://192.168.1.104:3001/api' 
-  : 'http://localhost:3001/api';
+// Detect environment and set appropriate API base URL
+const getApiBaseUrl = () => {
+  // If VITE_API_URL is set, use it (for custom configurations)
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  
+  // In production (deployed), use relative URLs
+  if (import.meta.env.PROD) {
+    return '/api';
+  }
+  
+  // In development, check if we're accessing via network IP
+  const isNetworkAccess = window?.location?.hostname === '192.168.1.104';
+  return isNetworkAccess 
+    ? 'http://192.168.1.104:3001/api' 
+    : 'http://localhost:3001/api';
+};
 
 export const config = {
   // API Configuration
-  API_URL: import.meta.env.VITE_API_URL || apiBaseUrl,
+  API_URL: getApiBaseUrl(),
   
   // Frontend Configuration
   APP_NAME: 'DentLeon Suits',
