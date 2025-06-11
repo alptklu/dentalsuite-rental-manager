@@ -25,7 +25,7 @@ router.post('/login', [
 
     // Find user
     const user = await dbGet(
-      'SELECT * FROM users WHERE username = ? AND active = 1',
+      'SELECT * FROM users WHERE username = $1 AND active = true',
       [username]
     );
 
@@ -57,13 +57,13 @@ router.post('/login', [
     // Store refresh token in database
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
     await dbRun(
-      'INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)',
-      [user.id, refreshToken, expiresAt.toISOString()]
+      'INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+      [user.id, refreshToken, expiresAt]
     );
 
     // Update last login
     await dbRun(
-      'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?',
+      'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
       [user.id]
     );
 
@@ -100,7 +100,7 @@ router.post('/refresh', async (req, res) => {
 
     // Check if refresh token exists in database and is not expired
     const storedToken = await dbGet(
-      'SELECT * FROM refresh_tokens WHERE token = ? AND expires_at > datetime("now")',
+      'SELECT * FROM refresh_tokens WHERE token = $1 AND expires_at > NOW()',
       [refreshToken]
     );
 
@@ -110,7 +110,7 @@ router.post('/refresh', async (req, res) => {
 
     // Get user
     const user = await dbGet(
-      'SELECT id, username, email, role, active FROM users WHERE id = ? AND active = 1',
+      'SELECT id, username, email, role, active FROM users WHERE id = $1 AND active = true',
       [decoded.userId]
     );
 
@@ -124,8 +124,8 @@ router.post('/refresh', async (req, res) => {
     // Replace old refresh token with new one
     const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     await dbRun(
-      'UPDATE refresh_tokens SET token = ?, expires_at = ? WHERE token = ?',
-      [newRefreshToken, newExpiresAt.toISOString(), refreshToken]
+      'UPDATE refresh_tokens SET token = $1, expires_at = $2 WHERE token = $3',
+      [newRefreshToken, newExpiresAt, refreshToken]
     );
 
     res.json({
@@ -146,7 +146,7 @@ router.post('/logout', authenticateToken, async (req, res) => {
 
     if (refreshToken) {
       // Remove refresh token from database
-      await dbRun('DELETE FROM refresh_tokens WHERE token = ?', [refreshToken]);
+      await dbRun('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
     }
 
     res.json({ message: 'Logout successful' });
@@ -160,7 +160,7 @@ router.post('/logout', authenticateToken, async (req, res) => {
 router.post('/logout-all', authenticateToken, async (req, res) => {
   try {
     // Remove all refresh tokens for the user
-    await dbRun('DELETE FROM refresh_tokens WHERE user_id = ?', [req.user.id]);
+    await dbRun('DELETE FROM refresh_tokens WHERE user_id = $1', [req.user.id]);
 
     res.json({ message: 'Logged out from all devices' });
   } catch (error) {
@@ -184,7 +184,7 @@ router.post('/change-password', [
     const { currentPassword, newPassword } = req.body;
 
     // Get user with password
-    const user = await dbGet('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    const user = await dbGet('SELECT * FROM users WHERE id = $1', [req.user.id]);
 
     // Verify current password
     const isValidPassword = await bcrypt.compare(currentPassword, user.password);
@@ -197,12 +197,12 @@ router.post('/change-password', [
 
     // Update password
     await dbRun(
-      'UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      'UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
       [hashedNewPassword, req.user.id]
     );
 
     // Invalidate all refresh tokens to force re-login
-    await dbRun('DELETE FROM refresh_tokens WHERE user_id = ?', [req.user.id]);
+    await dbRun('DELETE FROM refresh_tokens WHERE user_id = $1', [req.user.id]);
 
     res.json({ message: 'Password changed successfully. Please login again.' });
   } catch (error) {
@@ -215,7 +215,7 @@ router.post('/change-password', [
 router.get('/profile', authenticateToken, async (req, res) => {
   try {
     const user = await dbGet(
-      'SELECT id, username, email, role, active, created_at, last_login FROM users WHERE id = ?',
+      'SELECT id, username, email, role, active, created_at, last_login FROM users WHERE id = $1',
       [req.user.id]
     );
 
@@ -230,7 +230,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
 router.get('/debug/users', async (req, res) => {
   try {
     const users = await dbAll('SELECT id, username, email, role, active, created_at FROM users');
-    const adminUser = await dbGet('SELECT id, username, email, role, active, created_at FROM users WHERE role = "admin"');
+    const adminUser = await dbGet('SELECT id, username, email, role, active, created_at FROM users WHERE role = $1', ['admin']);
     
     // Check if password field exists and has values (without exposing passwords)
     const usersWithPasswordCheck = await dbAll(`
@@ -262,8 +262,8 @@ router.get('/debug/users', async (req, res) => {
              ELSE 'EXISTS' 
         END as password_status,
         length(password) as password_length
-      FROM users WHERE role = "admin"
-    `);
+      FROM users WHERE role = $1
+    `, ['admin']);
     
     res.json({
       message: 'Debug info',
@@ -292,7 +292,7 @@ router.post('/debug/password-test', async (req, res) => {
     const isValid = await bcrypt.compare(testPassword, hashedPassword);
     
     // Get admin user's actual password hash
-    const adminUser = await dbGet('SELECT id, username, password FROM users WHERE role = "admin"');
+    const adminUser = await dbGet('SELECT id, username, password FROM users WHERE role = $1', ['admin']);
     
     let adminPasswordTest = null;
     if (adminUser && adminUser.password) {
@@ -323,13 +323,13 @@ router.post('/debug/password-test', async (req, res) => {
 router.post('/debug/recreate-admin', async (req, res) => {
   try {
     // Delete existing admin user if exists
-    await dbRun('DELETE FROM users WHERE username = "admin"');
+    await dbRun('DELETE FROM users WHERE username = $1', ['admin']);
     
     // Create new admin user
     const hashedPassword = await bcrypt.hash('admin123', 10);
     await dbRun(`
       INSERT INTO users (username, email, password, role)
-      VALUES (?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4)
     `, ['admin', 'admin@dentalsuite.com', hashedPassword, 'admin']);
     
     // Verify creation
@@ -346,8 +346,8 @@ router.post('/debug/recreate-admin', async (req, res) => {
              ELSE 'EXISTS' 
         END as password_status,
         length(password) as password_length
-      FROM users WHERE username = "admin"
-    `);
+      FROM users WHERE username = $1
+    `, ['admin']);
     
     res.json({
       message: 'Admin user recreated',

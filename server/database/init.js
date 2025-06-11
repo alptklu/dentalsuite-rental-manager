@@ -1,121 +1,132 @@
-import sqlite3 from 'sqlite3';
-import { promisify } from 'util';
+import pkg from 'pg';
 import bcrypt from 'bcryptjs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const { Pool } = pkg;
 
-// Create database connection
-const dbPath = path.join(__dirname, '../data/dentalsuite.db');
-const db = new sqlite3.Database(dbPath);
+// Create PostgreSQL connection pool
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
-// Promisify database methods
-const dbRun = promisify(db.run.bind(db));
-const dbGet = promisify(db.get.bind(db));
-const dbAll = promisify(db.all.bind(db));
+// Helper function to execute queries
+export const query = async (text, params) => {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(text, params);
+    return result;
+  } finally {
+    client.release();
+  }
+};
 
-export { db, dbRun, dbGet, dbAll };
+// Helper functions for compatibility with existing code
+export const dbRun = async (sql, params = []) => {
+  const result = await query(sql, params);
+  return result;
+};
+
+export const dbGet = async (sql, params = []) => {
+  const result = await query(sql, params);
+  return result.rows[0] || null;
+};
+
+export const dbAll = async (sql, params = []) => {
+  const result = await query(sql, params);
+  return result.rows;
+};
+
+export { pool as db };
 
 export const initDatabase = async () => {
   try {
-    // Enable foreign keys
-    await dbRun('PRAGMA foreign_keys = ON');
-
     // Create users table
-    await dbRun(`
+    await query(`
       CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        role TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'viewer')),
-        active INTEGER DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        last_login DATETIME
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL CHECK (role IN ('admin', 'manager', 'viewer')),
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_login TIMESTAMP
       )
     `);
 
     // Create apartments table
-    await dbRun(`
+    await query(`
       CREATE TABLE IF NOT EXISTS apartments (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
+        id VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
         properties TEXT NOT NULL,
-        is_favorite INTEGER DEFAULT 0,
-        created_by INTEGER,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (created_by) REFERENCES users (id)
+        is_favorite BOOLEAN DEFAULT false,
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
     // Create bookings table
-    await dbRun(`
+    await query(`
       CREATE TABLE IF NOT EXISTS bookings (
-        id TEXT PRIMARY KEY,
-        guest_name TEXT NOT NULL,
-        check_in DATETIME NOT NULL,
-        check_out DATETIME NOT NULL,
-        apartment_id TEXT,
-        temporary_apartment TEXT,
-        created_by INTEGER,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (apartment_id) REFERENCES apartments (id) ON DELETE CASCADE,
-        FOREIGN KEY (created_by) REFERENCES users (id)
+        id VARCHAR(255) PRIMARY KEY,
+        guest_name VARCHAR(255) NOT NULL,
+        check_in TIMESTAMP NOT NULL,
+        check_out TIMESTAMP NOT NULL,
+        apartment_id VARCHAR(255) REFERENCES apartments(id) ON DELETE CASCADE,
+        temporary_apartment VARCHAR(255),
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
     // Create audit log table for tracking changes
-    await dbRun(`
+    await query(`
       CREATE TABLE IF NOT EXISTS audit_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        action TEXT NOT NULL,
-        table_name TEXT NOT NULL,
-        record_id TEXT,
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        action VARCHAR(255) NOT NULL,
+        table_name VARCHAR(255) NOT NULL,
+        record_id VARCHAR(255),
         old_values TEXT,
         new_values TEXT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users (id)
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
     // Create refresh tokens table
-    await dbRun(`
+    await query(`
       CREATE TABLE IF NOT EXISTS refresh_tokens (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        token TEXT NOT NULL,
-        expires_at DATETIME NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token VARCHAR(500) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
     // Create backup metadata table
-    await dbRun(`
+    await query(`
       CREATE TABLE IF NOT EXISTS backup_metadata (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        filename TEXT NOT NULL,
+        id SERIAL PRIMARY KEY,
+        filename VARCHAR(255) NOT NULL,
         file_size INTEGER,
-        created_by INTEGER,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (created_by) REFERENCES users (id)
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
     // Check if admin user exists, if not create one
-    const adminUser = await dbGet('SELECT * FROM users WHERE role = "admin" LIMIT 1');
+    const adminUser = await dbGet('SELECT * FROM users WHERE role = $1 LIMIT 1', ['admin']);
     
     if (!adminUser) {
       const hashedPassword = await bcrypt.hash('admin123', 10);
-      await dbRun(`
+      await query(`
         INSERT INTO users (username, email, password, role)
-        VALUES (?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4)
       `, ['admin', 'admin@dentalsuite.com', hashedPassword, 'admin']);
       
       console.log('Default admin user created:');
@@ -125,15 +136,20 @@ export const initDatabase = async () => {
       console.log('Please change the default password after first login!');
     }
 
-    // Migration: Add temporary_apartment column if it doesn't exist
+    // Check if temporary_apartment column exists, if not add it
     try {
-      await dbRun('ALTER TABLE bookings ADD COLUMN temporary_apartment TEXT');
-      console.log('Migration: Added temporary_apartment column to bookings table');
-    } catch (error) {
-      // Column already exists, which is fine
-      if (!error.message.includes('duplicate column name')) {
-        console.error('Migration error:', error);
+      const columnExists = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'bookings' AND column_name = 'temporary_apartment'
+      `);
+      
+      if (columnExists.rows.length === 0) {
+        await query('ALTER TABLE bookings ADD COLUMN temporary_apartment VARCHAR(255)');
+        console.log('Migration: Added temporary_apartment column to bookings table');
       }
+    } catch (error) {
+      console.error('Migration error:', error);
     }
 
     console.log('Database initialized successfully');

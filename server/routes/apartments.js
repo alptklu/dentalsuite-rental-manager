@@ -37,7 +37,7 @@ router.get('/:id', async (req, res) => {
       SELECT a.*, u.username as created_by_username 
       FROM apartments a
       LEFT JOIN users u ON a.created_by = u.id
-      WHERE a.id = ?
+      WHERE a.id = $1
     `, [req.params.id]);
 
     if (!apartment) {
@@ -74,20 +74,20 @@ router.post('/', [
 
     await dbRun(`
       INSERT INTO apartments (id, name, properties, created_by)
-      VALUES (?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4)
     `, [id, name, JSON.stringify(properties), req.user.id]);
 
     // Log the action
     await dbRun(`
       INSERT INTO audit_logs (user_id, action, table_name, record_id, new_values)
-      VALUES (?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5)
     `, [req.user.id, 'CREATE', 'apartments', id, JSON.stringify({ name, properties })]);
 
     const newApartment = await dbGet(`
       SELECT a.*, u.username as created_by_username 
       FROM apartments a
       LEFT JOIN users u ON a.created_by = u.id
-      WHERE a.id = ?
+      WHERE a.id = $1
     `, [id]);
 
     const formattedApartment = {
@@ -119,7 +119,7 @@ router.put('/:id', [
     const updates = req.body;
 
     // Get old values for audit log
-    const oldApartment = await dbGet('SELECT * FROM apartments WHERE id = ?', [id]);
+    const oldApartment = await dbGet('SELECT * FROM apartments WHERE id = $1', [id]);
     
     if (!oldApartment) {
       return res.status(404).json({ message: 'Apartment not found' });
@@ -127,20 +127,24 @@ router.put('/:id', [
 
     const updateFields = [];
     const updateValues = [];
+    let paramCount = 1;
 
     if (updates.name !== undefined) {
-      updateFields.push('name = ?');
+      updateFields.push(`name = $${paramCount}`);
       updateValues.push(updates.name);
+      paramCount++;
     }
 
     if (updates.properties !== undefined) {
-      updateFields.push('properties = ?');
+      updateFields.push(`properties = $${paramCount}`);
       updateValues.push(JSON.stringify(updates.properties));
+      paramCount++;
     }
 
     if (updates.isFavorite !== undefined) {
-      updateFields.push('is_favorite = ?');
-      updateValues.push(updates.isFavorite ? 1 : 0);
+      updateFields.push(`is_favorite = $${paramCount}`);
+      updateValues.push(updates.isFavorite);
+      paramCount++;
     }
 
     if (updateFields.length === 0) {
@@ -152,20 +156,20 @@ router.put('/:id', [
 
     await dbRun(`
       UPDATE apartments SET ${updateFields.join(', ')}
-      WHERE id = ?
+      WHERE id = $${paramCount}
     `, updateValues);
 
     // Log the action
     await dbRun(`
       INSERT INTO audit_logs (user_id, action, table_name, record_id, old_values, new_values)
-      VALUES (?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6)
     `, [req.user.id, 'UPDATE', 'apartments', id, JSON.stringify(oldApartment), JSON.stringify(updates)]);
 
     const updatedApartment = await dbGet(`
       SELECT a.*, u.username as created_by_username 
       FROM apartments a
       LEFT JOIN users u ON a.created_by = u.id
-      WHERE a.id = ?
+      WHERE a.id = $1
     `, [id]);
 
     const formattedApartment = {
@@ -187,14 +191,14 @@ router.delete('/:id', hasPermission('admin'), async (req, res) => {
     const { id } = req.params;
 
     // Get apartment for audit log
-    const apartment = await dbGet('SELECT * FROM apartments WHERE id = ?', [id]);
+    const apartment = await dbGet('SELECT * FROM apartments WHERE id = $1', [id]);
     
     if (!apartment) {
       return res.status(404).json({ message: 'Apartment not found' });
     }
 
     // Check if apartment has bookings
-    const bookingCount = await dbGet('SELECT COUNT(*) as count FROM bookings WHERE apartment_id = ?', [id]);
+    const bookingCount = await dbGet('SELECT COUNT(*) as count FROM bookings WHERE apartment_id = $1', [id]);
     
     if (bookingCount.count > 0) {
       return res.status(400).json({ 
@@ -203,12 +207,12 @@ router.delete('/:id', hasPermission('admin'), async (req, res) => {
       });
     }
 
-    await dbRun('DELETE FROM apartments WHERE id = ?', [id]);
+    await dbRun('DELETE FROM apartments WHERE id = $1', [id]);
 
     // Log the action
     await dbRun(`
       INSERT INTO audit_logs (user_id, action, table_name, record_id, old_values)
-      VALUES (?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5)
     `, [req.user.id, 'DELETE', 'apartments', id, JSON.stringify(apartment)]);
 
     res.json({ message: 'Apartment deleted successfully' });
@@ -223,23 +227,23 @@ router.patch('/:id/favorite', hasPermission('manager'), async (req, res) => {
   try {
     const { id } = req.params;
 
-    const apartment = await dbGet('SELECT * FROM apartments WHERE id = ?', [id]);
+    const apartment = await dbGet('SELECT * FROM apartments WHERE id = $1', [id]);
     
     if (!apartment) {
       return res.status(404).json({ message: 'Apartment not found' });
     }
 
-    const newFavoriteValue = apartment.is_favorite ? 0 : 1;
+    const newFavoriteValue = !apartment.is_favorite;
 
     await dbRun(`
-      UPDATE apartments SET is_favorite = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
+      UPDATE apartments SET is_favorite = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
     `, [newFavoriteValue, id]);
 
     // Log the action
     await dbRun(`
       INSERT INTO audit_logs (user_id, action, table_name, record_id, old_values, new_values)
-      VALUES (?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6)
     `, [req.user.id, 'UPDATE', 'apartments', id, 
         JSON.stringify({ is_favorite: apartment.is_favorite }), 
         JSON.stringify({ is_favorite: newFavoriteValue })]);

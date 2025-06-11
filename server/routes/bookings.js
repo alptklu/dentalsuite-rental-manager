@@ -15,15 +15,19 @@ router.get('/', async (req, res) => {
     let whereClause = '';
     let queryParams = [];
 
+    let paramCount = 1;
+
     if (apartment_id) {
-      whereClause += ' WHERE b.apartment_id = ?';
+      whereClause += ` WHERE b.apartment_id = $${paramCount}`;
       queryParams.push(apartment_id);
+      paramCount++;
     }
 
     if (guest_name) {
       whereClause += whereClause ? ' AND' : ' WHERE';
-      whereClause += ' b.guest_name LIKE ?';
+      whereClause += ` b.guest_name LIKE $${paramCount}`;
       queryParams.push(`%${guest_name}%`);
+      paramCount++;
     }
 
     const bookings = await dbAll(`
@@ -33,7 +37,7 @@ router.get('/', async (req, res) => {
       LEFT JOIN users u ON b.created_by = u.id
       ${whereClause}
       ORDER BY b.check_in DESC
-      LIMIT ? OFFSET ?
+      LIMIT $${paramCount} OFFSET $${paramCount + 1}
     `, [...queryParams, limit, offset]);
 
     // Convert ISO strings back to Date objects for frontend compatibility
@@ -58,7 +62,7 @@ router.get('/:id', async (req, res) => {
       FROM bookings b
       LEFT JOIN apartments a ON b.apartment_id = a.id
       LEFT JOIN users u ON b.created_by = u.id
-      WHERE b.id = ?
+      WHERE b.id = $1
     `, [req.params.id]);
 
     if (!booking) {
@@ -113,8 +117,8 @@ router.post('/', [
     if (apartment_id) {
       const overlappingBooking = await dbGet(`
         SELECT * FROM bookings 
-        WHERE apartment_id = ? 
-        AND ((check_in <= ? AND check_out > ?) OR (check_in < ? AND check_out >= ?))
+        WHERE apartment_id = $1 
+        AND ((check_in <= $2 AND check_out > $2) OR (check_in < $3 AND check_out >= $3))
       `, [apartment_id, check_in, check_in, check_out, check_out]);
 
       if (overlappingBooking) {
@@ -125,7 +129,7 @@ router.post('/', [
       }
 
       // Verify apartment exists
-      const apartment = await dbGet('SELECT * FROM apartments WHERE id = ?', [apartment_id]);
+      const apartment = await dbGet('SELECT * FROM apartments WHERE id = $1', [apartment_id]);
       if (!apartment) {
         return res.status(404).json({ message: 'Apartment not found' });
       }
@@ -133,7 +137,7 @@ router.post('/', [
 
     await dbRun(`
       INSERT INTO bookings (id, guest_name, check_in, check_out, apartment_id, temporary_apartment, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
     `, [id, guest_name, check_in, check_out, apartment_id || null, temporary_apartment || null, req.user.id]);
 
     // Log the action

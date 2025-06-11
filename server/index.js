@@ -22,8 +22,22 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Check for required environment variables
+if (!process.env.DATABASE_URL) {
+  console.error('❌ DATABASE_URL environment variable is required');
+  console.error('Please set DATABASE_URL to your PostgreSQL connection string');
+  process.exit(1);
+}
+
 // Initialize database
-await initDatabase();
+try {
+  console.log('🔄 Initializing database...');
+  await initDatabase();
+  console.log('✅ Database initialized successfully');
+} catch (error) {
+  console.error('❌ Database initialization failed:', error);
+  process.exit(1);
+}
 
 // Security middleware
 app.use(helmet());
