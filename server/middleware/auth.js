@@ -16,7 +16,7 @@ export const authenticateToken = async (req, res, next) => {
     
     // Get user from database to ensure they still exist and are active
     const user = await dbGet(
-      'SELECT id, username, email, role, active FROM users WHERE id = ?',
+      'SELECT id, username, email, role, active FROM users WHERE id = $1',
       [decoded.userId]
     );
 

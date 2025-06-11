@@ -117,7 +117,7 @@ router.put('/:id', [
     const updates = req.body;
 
     // Get old user data for audit log
-    const oldUser = await dbGet('SELECT * FROM users WHERE id = ?', [id]);
+    const oldUser = await dbGet('SELECT * FROM users WHERE id = $1', [id]);
     
     if (!oldUser) {
       return res.status(404).json({ message: 'User not found' });
@@ -136,7 +136,7 @@ router.put('/:id', [
     // Check if username or email conflicts with existing users
     if (updates.username || updates.email) {
       const conflictUser = await dbGet(
-        'SELECT id FROM users WHERE (username = ? OR email = ?) AND id != ?',
+        'SELECT id FROM users WHERE (username = $1 OR email = $2) AND id != $3',
         [updates.username || oldUser.username, updates.email || oldUser.email, id]
       );
 
@@ -148,24 +148,30 @@ router.put('/:id', [
     const updateFields = [];
     const updateValues = [];
 
+    let paramCount = 1;
+
     if (updates.username !== undefined) {
-      updateFields.push('username = ?');
+      updateFields.push(`username = $${paramCount}`);
       updateValues.push(updates.username);
+      paramCount++;
     }
 
     if (updates.email !== undefined) {
-      updateFields.push('email = ?');
+      updateFields.push(`email = $${paramCount}`);
       updateValues.push(updates.email);
+      paramCount++;
     }
 
     if (updates.role !== undefined) {
-      updateFields.push('role = ?');
+      updateFields.push(`role = $${paramCount}`);
       updateValues.push(updates.role);
+      paramCount++;
     }
 
     if (updates.active !== undefined) {
-      updateFields.push('active = ?');
-      updateValues.push(updates.active ? 1 : 0);
+      updateFields.push(`active = $${paramCount}`);
+      updateValues.push(updates.active);
+      paramCount++;
     }
 
     if (updateFields.length === 0) {
@@ -177,7 +183,7 @@ router.put('/:id', [
 
     await dbRun(`
       UPDATE users SET ${updateFields.join(', ')}
-      WHERE id = ?
+      WHERE id = $${paramCount}
     `, updateValues);
 
     // Log the action
