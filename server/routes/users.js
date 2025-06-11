@@ -28,7 +28,7 @@ router.get('/:id', hasPermission('admin'), async (req, res) => {
     const user = await dbGet(`
       SELECT id, username, email, role, active, created_at, updated_at, last_login
       FROM users
-      WHERE id = ?
+      WHERE id = $1
     `, [req.params.id]);
 
     if (!user) {
@@ -60,7 +60,7 @@ router.post('/', [
 
     // Check if username or email already exists
     const existingUser = await dbGet(
-      'SELECT id FROM users WHERE username = ? OR email = ?',
+      'SELECT id FROM users WHERE username = $1 OR email = $2',
       [username, email]
     );
 
@@ -74,22 +74,22 @@ router.post('/', [
     // Create user
     const result = await dbRun(`
       INSERT INTO users (username, email, password, role, active)
-      VALUES (?, ?, ?, ?, 1)
+      VALUES ($1, $2, $3, $4, true) RETURNING id
     `, [username, email, hashedPassword, role]);
 
-    const userId = result.lastID;
+    const userId = result.rows[0].id;
 
     // Log the action
     await dbRun(`
       INSERT INTO audit_logs (user_id, action, table_name, record_id, new_values)
-      VALUES (?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5)
     `, [req.user.id, 'CREATE', 'users', userId, JSON.stringify({ username, email, role })]);
 
     // Get created user (without password)
     const newUser = await dbGet(`
       SELECT id, username, email, role, active, created_at, updated_at
       FROM users
-      WHERE id = ?
+      WHERE id = $1
     `, [userId]);
 
     res.status(201).json(newUser);
