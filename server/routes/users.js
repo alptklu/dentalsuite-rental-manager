@@ -320,11 +320,11 @@ router.post('/:id/reset-password', [
 router.get('/stats/overview', hasPermission('admin'), async (req, res) => {
   try {
     const totalUsers = await dbGet('SELECT COUNT(*) as count FROM users');
-    const activeUsers = await dbGet('SELECT COUNT(*) as count FROM users WHERE active = 1');
+    const activeUsers = await dbGet('SELECT COUNT(*) as count FROM users WHERE active = true');
     const usersByRole = await dbAll(`
       SELECT role, COUNT(*) as count 
       FROM users 
-      WHERE active = 1 
+      WHERE active = true 
       GROUP BY role
     `);
     
@@ -340,7 +340,7 @@ router.get('/stats/overview', hasPermission('admin'), async (req, res) => {
       SELECT u.username, u.role, COUNT(al.id) as activity_count
       FROM users u
       LEFT JOIN audit_logs al ON u.id = al.user_id
-      WHERE u.active = 1
+      WHERE u.active = true
       GROUP BY u.id, u.username, u.role
       ORDER BY activity_count DESC
       LIMIT 10

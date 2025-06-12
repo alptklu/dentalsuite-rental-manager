@@ -160,7 +160,7 @@ router.post('/import', [hasPermission('admin'), upload.single('backup')], async 
             apartment.id,
             apartment.name,
             JSON.stringify(apartment.properties || []),
-            apartment.isFavorite ? 1 : 0,
+            apartment.isFavorite ? true : false,
             req.user.id, // Set current user as creator for imported data
             apartment.created_at || new Date().toISOString(),
             apartment.updated_at || new Date().toISOString()
@@ -213,7 +213,7 @@ router.post('/import', [hasPermission('admin'), upload.single('backup')], async 
                 user.email,
                 user.password || '$2a$10$defaulthash', // Default hash, user will need to reset password
                 user.role || 'viewer',
-                user.active !== undefined ? user.active : 1,
+                user.active !== undefined ? user.active : true,
                 user.created_at || new Date().toISOString(),
                 user.last_login
               ]);
@@ -231,7 +231,7 @@ router.post('/import', [hasPermission('admin'), upload.single('backup')], async 
                 user.email,
                 user.password || '$2a$10$defaulthash', // Default hash, user will need to reset password
                 user.role || 'viewer',
-                user.active !== undefined ? user.active : 1,
+                user.active !== undefined ? user.active : true,
                 user.created_at || new Date().toISOString(),
                 user.last_login
               ]);
@@ -309,7 +309,7 @@ router.get('/stats', hasPermission('admin'), async (req, res) => {
   try {
     const apartmentCount = await dbGet('SELECT COUNT(*) as count FROM apartments');
     const bookingCount = await dbGet('SELECT COUNT(*) as count FROM bookings');
-    const userCount = await dbGet('SELECT COUNT(*) as count FROM users WHERE active = 1');
+    const userCount = await dbGet('SELECT COUNT(*) as count FROM users WHERE active = true');
     const auditLogCount = await dbGet('SELECT COUNT(*) as count FROM audit_logs');
     const backupCount = await dbGet('SELECT COUNT(*) as count FROM backup_metadata');
 
@@ -322,10 +322,9 @@ router.get('/stats', hasPermission('admin'), async (req, res) => {
       LIMIT 10
     `);
 
-    // Get database size (approximate)
+    // Get database size (approximate) - PostgreSQL equivalent
     const dbSize = await dbGet(`
-      SELECT page_count * page_size as size 
-      FROM pragma_page_count(), pragma_page_size()
+      SELECT pg_database_size(current_database()) as size
     `);
 
     res.json({
