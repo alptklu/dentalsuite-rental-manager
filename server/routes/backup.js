@@ -84,16 +84,16 @@ router.get('/export', hasPermission('admin'), async (req, res) => {
     // Save backup metadata
     await dbRun(`
       INSERT INTO backup_metadata (filename, file_size, created_by)
-      VALUES (?, ?, ?)
+      VALUES ($1, $2, $3)
     `, [filename, JSON.stringify(exportData).length, req.user.id]);
 
     // Get the inserted backup ID for audit log
-    const backupRecord = await dbGet('SELECT id FROM backup_metadata WHERE filename = ? ORDER BY id DESC LIMIT 1', [filename]);
+    const backupRecord = await dbGet('SELECT id FROM backup_metadata WHERE filename = $1 ORDER BY id DESC LIMIT 1', [filename]);
 
     // Log the action
     await dbRun(`
       INSERT INTO audit_logs (user_id, action, table_name, record_id, new_values)
-      VALUES (?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5)
     `, [req.user.id, 'EXPORT', 'backup', backupRecord.id, JSON.stringify({ filename, statistics: exportData.statistics })]);
 
     res.setHeader('Content-Type', 'application/json');
@@ -142,15 +142,20 @@ router.post('/import', [hasPermission('admin'), upload.single('backup')], async 
       if (replace) {
         await dbRun('DELETE FROM bookings');
         await dbRun('DELETE FROM apartments');
-        await dbRun('DELETE FROM users WHERE id != ?', [req.user.id]);
+        await dbRun('DELETE FROM users WHERE id != $1', [req.user.id]);
       }
 
       // Import apartments
       for (const apartment of apartments) {
         try {
           await dbRun(`
-            INSERT OR REPLACE INTO apartments (id, name, properties, is_favorite, created_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO apartments (id, name, properties, is_favorite, created_by, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            properties = EXCLUDED.properties,
+            is_favorite = EXCLUDED.is_favorite,
+            updated_at = EXCLUDED.updated_at
           `, [
             apartment.id,
             apartment.name,
@@ -170,8 +175,14 @@ router.post('/import', [hasPermission('admin'), upload.single('backup')], async 
       for (const booking of bookings) {
         try {
           await dbRun(`
-            INSERT OR REPLACE INTO bookings (id, guest_name, check_in, check_out, apartment_id, created_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO bookings (id, guest_name, check_in, check_out, apartment_id, created_by, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (id) DO UPDATE SET
+            guest_name = EXCLUDED.guest_name,
+            check_in = EXCLUDED.check_in,
+            check_out = EXCLUDED.check_out,
+            apartment_id = EXCLUDED.apartment_id,
+            updated_at = EXCLUDED.updated_at
           `, [
             booking.id,
             booking.guest_name,
@@ -196,7 +207,7 @@ router.post('/import', [hasPermission('admin'), upload.single('backup')], async 
             if (user.id !== req.user.id) {
               await dbRun(`
                 INSERT INTO users (username, email, password, role, active, created_at, last_login)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
               `, [
                 user.username,
                 user.email,
@@ -210,11 +221,11 @@ router.post('/import', [hasPermission('admin'), upload.single('backup')], async 
             }
           } else {
             // In non-replace mode, only import users that don't already exist
-            const existingUser = await dbGet('SELECT id FROM users WHERE username = ? OR email = ?', [user.username, user.email]);
+            const existingUser = await dbGet('SELECT id FROM users WHERE username = $1 OR email = $2', [user.username, user.email]);
             if (!existingUser) {
               await dbRun(`
                 INSERT INTO users (username, email, password, role, active, created_at, last_login)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
               `, [
                 user.username,
                 user.email,
@@ -235,16 +246,16 @@ router.post('/import', [hasPermission('admin'), upload.single('backup')], async 
       // Save import metadata
       await dbRun(`
         INSERT INTO backup_metadata (filename, file_size, created_by)
-        VALUES (?, ?, ?)
+        VALUES ($1, $2, $3)
       `, [`import-${req.file.filename}`, req.file.size, req.user.id]);
 
       // Get the inserted backup ID for audit log
-      const importRecord = await dbGet('SELECT id FROM backup_metadata WHERE filename = ? ORDER BY id DESC LIMIT 1', [`import-${req.file.filename}`]);
+      const importRecord = await dbGet('SELECT id FROM backup_metadata WHERE filename = $1 ORDER BY id DESC LIMIT 1', [`import-${req.file.filename}`]);
 
       // Log the action
       await dbRun(`
         INSERT INTO audit_logs (user_id, action, table_name, record_id, new_values)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4, $5)
       `, [req.user.id, 'IMPORT', 'backup', importRecord.id, JSON.stringify({ 
         filename: req.file.filename, 
         importedCounts,
@@ -341,13 +352,13 @@ router.delete('/cleanup/audit-logs', hasPermission('admin'), async (req, res) =>
     
     const result = await dbRun(`
       DELETE FROM audit_logs 
-      WHERE timestamp < datetime('now', '-' || ? || ' days')
+      WHERE timestamp < NOW() - INTERVAL '$1 days'
     `, [days]);
 
     // Log the cleanup action
     await dbRun(`
       INSERT INTO audit_logs (user_id, action, table_name, new_values)
-      VALUES (?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4)
     `, [req.user.id, 'CLEANUP', 'audit_logs', JSON.stringify({ daysOld: days, deletedCount: result.changes })]);
 
     res.json({

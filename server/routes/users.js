@@ -189,7 +189,7 @@ router.put('/:id', [
     // Log the action
     await dbRun(`
       INSERT INTO audit_logs (user_id, action, table_name, record_id, old_values, new_values)
-      VALUES (?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6)
     `, [req.user.id, 'UPDATE', 'users', id, JSON.stringify({
       username: oldUser.username,
       email: oldUser.email,
@@ -199,13 +199,13 @@ router.put('/:id', [
 
     // If user was deactivated, remove all their refresh tokens
     if (updates.active === false) {
-      await dbRun('DELETE FROM refresh_tokens WHERE user_id = ?', [id]);
+      await dbRun('DELETE FROM refresh_tokens WHERE user_id = $1', [id]);
     }
 
     const updatedUser = await dbGet(`
       SELECT id, username, email, role, active, created_at, updated_at, last_login
       FROM users
-      WHERE id = ?
+      WHERE id = $1
     `, [id]);
 
     res.json(updatedUser);
@@ -226,15 +226,15 @@ router.delete('/:id', hasPermission('admin'), async (req, res) => {
     }
 
     // Get user for audit log
-    const user = await dbGet('SELECT * FROM users WHERE id = ?', [id]);
+    const user = await dbGet('SELECT * FROM users WHERE id = $1', [id]);
     
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
     // Check if user has created data
-    const apartmentCount = await dbGet('SELECT COUNT(*) as count FROM apartments WHERE created_by = ?', [id]);
-    const bookingCount = await dbGet('SELECT COUNT(*) as count FROM bookings WHERE created_by = ?', [id]);
+    const apartmentCount = await dbGet('SELECT COUNT(*) as count FROM apartments WHERE created_by = $1', [id]);
+    const bookingCount = await dbGet('SELECT COUNT(*) as count FROM bookings WHERE created_by = $1', [id]);
 
     if (apartmentCount.count > 0 || bookingCount.count > 0) {
       return res.status(400).json({ 
@@ -247,13 +247,13 @@ router.delete('/:id', hasPermission('admin'), async (req, res) => {
     }
 
     // Delete user and related data
-    await dbRun('DELETE FROM refresh_tokens WHERE user_id = ?', [id]);
-    await dbRun('DELETE FROM users WHERE id = ?', [id]);
+    await dbRun('DELETE FROM refresh_tokens WHERE user_id = $1', [id]);
+    await dbRun('DELETE FROM users WHERE id = $1', [id]);
 
     // Log the action
     await dbRun(`
       INSERT INTO audit_logs (user_id, action, table_name, record_id, old_values)
-      VALUES (?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5)
     `, [req.user.id, 'DELETE', 'users', id, JSON.stringify({
       username: user.username,
       email: user.email,
@@ -282,7 +282,7 @@ router.post('/:id/reset-password', [
     const { newPassword } = req.body;
 
     // Check if user exists
-    const user = await dbGet('SELECT username FROM users WHERE id = ?', [id]);
+    const user = await dbGet('SELECT username FROM users WHERE id = $1', [id]);
     
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -293,17 +293,17 @@ router.post('/:id/reset-password', [
 
     // Update password
     await dbRun(
-      'UPDATE users SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      'UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
       [hashedPassword, id]
     );
 
     // Invalidate all refresh tokens for this user
-    await dbRun('DELETE FROM refresh_tokens WHERE user_id = ?', [id]);
+    await dbRun('DELETE FROM refresh_tokens WHERE user_id = $1', [id]);
 
     // Log the action
     await dbRun(`
       INSERT INTO audit_logs (user_id, action, table_name, record_id, new_values)
-      VALUES (?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5)
     `, [req.user.id, 'RESET_PASSWORD', 'users', id, JSON.stringify({ 
       username: user.username, 
       resetBy: req.user.username 

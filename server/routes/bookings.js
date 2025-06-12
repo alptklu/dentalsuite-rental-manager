@@ -143,7 +143,7 @@ router.post('/', [
     // Log the action
     await dbRun(`
       INSERT INTO audit_logs (user_id, action, table_name, record_id, new_values)
-      VALUES (?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5)
     `, [req.user.id, 'CREATE', 'bookings', id, JSON.stringify({ guest_name, check_in, check_out, apartment_id, temporary_apartment })]);
 
     const newBooking = await dbGet(`
@@ -151,7 +151,7 @@ router.post('/', [
       FROM bookings b
       LEFT JOIN apartments a ON b.apartment_id = a.id
       LEFT JOIN users u ON b.created_by = u.id
-      WHERE b.id = ?
+      WHERE b.id = $1
     `, [id]);
 
     const formattedBooking = {
@@ -196,7 +196,7 @@ router.put('/:id', [
     const updates = req.body;
 
     // Get old booking for audit log
-    const oldBooking = await dbGet('SELECT * FROM bookings WHERE id = ?', [id]);
+    const oldBooking = await dbGet('SELECT * FROM bookings WHERE id = $1', [id]);
     
     if (!oldBooking) {
       return res.status(404).json({ message: 'Booking not found' });
@@ -217,10 +217,9 @@ router.put('/:id', [
       if (apartmentId) {
         const overlappingBooking = await dbGet(`
           SELECT * FROM bookings 
-          WHERE apartment_id = ? AND id != ?
-          AND ((check_in <= ? AND check_out > ?) OR (check_in < ? AND check_out >= ?))
-        `, [apartmentId, id, checkInDate.toISOString(), checkInDate.toISOString(), 
-            checkOutDate.toISOString(), checkOutDate.toISOString()]);
+          WHERE apartment_id = $1 AND id != $2
+          AND ((check_in <= $3 AND check_out > $3) OR (check_in < $4 AND check_out >= $4))
+        `, [apartmentId, id, checkInDate.toISOString(), checkOutDate.toISOString()]);
 
         if (overlappingBooking) {
           return res.status(409).json({ 
@@ -233,30 +232,36 @@ router.put('/:id', [
 
     const updateFields = [];
     const updateValues = [];
+    let paramCount = 1;
 
     if (updates.guest_name !== undefined) {
-      updateFields.push('guest_name = ?');
+      updateFields.push(`guest_name = $${paramCount}`);
       updateValues.push(updates.guest_name);
+      paramCount++;
     }
 
     if (updates.check_in !== undefined) {
-      updateFields.push('check_in = ?');
+      updateFields.push(`check_in = $${paramCount}`);
       updateValues.push(updates.check_in);
+      paramCount++;
     }
 
     if (updates.check_out !== undefined) {
-      updateFields.push('check_out = ?');
+      updateFields.push(`check_out = $${paramCount}`);
       updateValues.push(updates.check_out);
+      paramCount++;
     }
 
     if (updates.apartment_id !== undefined) {
-      updateFields.push('apartment_id = ?');
+      updateFields.push(`apartment_id = $${paramCount}`);
       updateValues.push(updates.apartment_id || null);
+      paramCount++;
     }
 
     if (updates.temporary_apartment !== undefined) {
-      updateFields.push('temporary_apartment = ?');
+      updateFields.push(`temporary_apartment = $${paramCount}`);
       updateValues.push(updates.temporary_apartment || null);
+      paramCount++;
     }
 
     if (updateFields.length === 0) {
@@ -268,13 +273,13 @@ router.put('/:id', [
 
     await dbRun(`
       UPDATE bookings SET ${updateFields.join(', ')}
-      WHERE id = ?
+      WHERE id = $${paramCount}
     `, updateValues);
 
     // Log the action
     await dbRun(`
       INSERT INTO audit_logs (user_id, action, table_name, record_id, old_values, new_values)
-      VALUES (?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6)
     `, [req.user.id, 'UPDATE', 'bookings', id, JSON.stringify(oldBooking), JSON.stringify(updates)]);
 
     const updatedBooking = await dbGet(`
@@ -282,7 +287,7 @@ router.put('/:id', [
       FROM bookings b
       LEFT JOIN apartments a ON b.apartment_id = a.id
       LEFT JOIN users u ON b.created_by = u.id
-      WHERE b.id = ?
+      WHERE b.id = $1
     `, [id]);
 
     const formattedBooking = {
@@ -304,18 +309,18 @@ router.delete('/:id', hasPermission('manager'), async (req, res) => {
     const { id } = req.params;
 
     // Get booking for audit log
-    const booking = await dbGet('SELECT * FROM bookings WHERE id = ?', [id]);
+    const booking = await dbGet('SELECT * FROM bookings WHERE id = $1', [id]);
     
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
 
-    await dbRun('DELETE FROM bookings WHERE id = ?', [id]);
+    await dbRun('DELETE FROM bookings WHERE id = $1', [id]);
 
     // Log the action
     await dbRun(`
       INSERT INTO audit_logs (user_id, action, table_name, record_id, old_values)
-      VALUES (?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5)
     `, [req.user.id, 'DELETE', 'bookings', id, JSON.stringify(booking)]);
 
     res.json({ message: 'Booking deleted successfully' });
@@ -345,8 +350,8 @@ router.post('/available-apartments', [
     const unavailableApartments = await dbAll(`
       SELECT DISTINCT apartment_id FROM bookings
       WHERE apartment_id IS NOT NULL
-      AND ((check_in <= ? AND check_out > ?) OR (check_in < ? AND check_out >= ?))
-    `, [check_in, check_in, check_out, check_out]);
+      AND ((check_in <= $1 AND check_out > $1) OR (check_in < $2 AND check_out >= $2))
+    `, [check_in, check_out]);
 
     const unavailableIds = unavailableApartments.map(apt => apt.apartment_id);
 
@@ -397,13 +402,13 @@ router.post('/batch', [
 
       await dbRun(`
         INSERT INTO bookings (id, guest_name, check_in, check_out, apartment_id, created_by)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4, $5, $6)
       `, [id, guest_name, check_in, check_out, apartment_id || null, req.user.id]);
 
       // Log the action
       await dbRun(`
         INSERT INTO audit_logs (user_id, action, table_name, record_id, new_values)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4, $5)
       `, [req.user.id, 'CREATE', 'bookings', id, JSON.stringify(booking)]);
 
       createdBookings.push(id);
@@ -436,7 +441,7 @@ router.delete('/', hasPermission('admin'), async (req, res) => {
     // Log the action
     await dbRun(`
       INSERT INTO audit_logs (user_id, action, table_name, record_id, old_values)
-      VALUES (?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5)
     `, [req.user.id, 'DELETE_ALL', 'bookings', 'ALL', JSON.stringify({ count: allBookings.length })]);
 
     res.json({ 
