@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "server": "node server/index.js",
     "start": "node server/index.js",
-    "migrate": "node server/database/migrate-to-postgres.js"
+    "migrate": "node server/database/migrate-to-postgres.js",
+    "fix-booleans": "node server/scripts/fix-boolean-data.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

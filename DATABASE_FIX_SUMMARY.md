@@ -82,15 +82,58 @@ WHERE timestamp < NOW() - INTERVAL '$1 days'
 - ✅ Changes committed and pushed to GitHub
 - 🔄 Deployment will automatically update on Render
 
+## Additional Boolean Compatibility Fixes (Second Update)
+
+### Issue Discovered
+After the initial fix, the Admin panel was still experiencing errors due to PostgreSQL's strict boolean type checking:
+```
+ERROR: operator does not exist: boolean = integer at character 50
+```
+
+### Additional Fixes Applied
+
+#### Boolean Field Comparisons
+```sql
+-- Before (SQLite compatible)
+SELECT COUNT(*) FROM users WHERE active = 1
+
+-- After (PostgreSQL compatible)  
+SELECT COUNT(*) FROM users WHERE active = true
+```
+
+#### Database Size Query
+```sql
+-- Before (SQLite)
+SELECT page_count * page_size as size 
+FROM pragma_page_count(), pragma_page_size()
+
+-- After (PostgreSQL)
+SELECT pg_database_size(current_database()) as size
+```
+
+#### Boolean Value Assignments
+```javascript
+// Before
+user.active !== undefined ? user.active : 1
+
+// After
+user.active !== undefined ? user.active : true
+```
+
 ## Expected Resolution
-The booking assignment functionality should now work correctly without 500 errors. Users should be able to:
-- Assign bookings to apartments
-- Update booking details
-- View booking information
-- Perform all CRUD operations on bookings
+The application should now work completely without database compatibility errors. Users should be able to:
+- ✅ Assign bookings to apartments
+- ✅ Update booking details
+- ✅ View booking information
+- ✅ Access the Admin panel and view user statistics
+- ✅ Perform all CRUD operations on bookings, users, and apartments
+- ✅ Use backup/import functionality
 
-## Deployment
-The fixes have been pushed to the main branch and will be automatically deployed to:
-- **Production URL**: https://dentalsuite-rental-manager.onrender.com
+## Deployment Status
+- ✅ Initial database compatibility fixes (commit 7623553)
+- ✅ Boolean compatibility fixes (commit bd59b56)
+- 🔄 Automatic deployment to Render in progress
 
-The deployment should complete within 5-10 minutes of the push. 
+**Production URL**: https://dentalsuite-rental-manager.onrender.com
+
+The deployment should complete within 5-10 minutes of the latest push. 

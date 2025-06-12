@@ -1,5 +1,6 @@
 import pkg from 'pg';
 import bcrypt from 'bcryptjs';
+import { migrateBooleanFields } from './migrate-booleans.js';
 
 const { Pool } = pkg;
 
@@ -150,6 +151,13 @@ export const initDatabase = async () => {
       }
     } catch (error) {
       console.error('Migration error:', error);
+    }
+
+    // Run boolean field migration to fix any imported data
+    try {
+      await migrateBooleanFields();
+    } catch (error) {
+      console.error('Boolean migration error:', error);
     }
 
     console.log('Database initialized successfully');
