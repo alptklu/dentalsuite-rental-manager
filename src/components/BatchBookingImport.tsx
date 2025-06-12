@@ -11,7 +11,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { format, parse, isValid } from 'date-fns';
+import { parse, isValid } from 'date-fns';
 import { Booking } from '@/types';
 
 interface BatchBookingImportProps {

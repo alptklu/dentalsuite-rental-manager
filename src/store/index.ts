@@ -1,15 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { v4 as uuidv4 } from 'uuid';
-import { areIntervalsOverlapping, addDays } from 'date-fns';
+import { areIntervalsOverlapping } from 'date-fns';
 
 import { Apartment, Booking } from '@/types';
 import { apartmentsAPI, bookingsAPI } from '@/lib/api';
-
-// Generate test data for initial load (will be replaced by API data)
-const generateTestData = () => {
-  return { apartments: [], bookings: [] };
-};
 
 interface AppState {
   apartments: Apartment[];
@@ -260,7 +254,7 @@ export const useAppStore = create<AppState>()(
     {
       name: 'apartment-booking-storage',
       // Only persist user preferences, not the actual data
-      partialize: (state) => ({ 
+      partialize: (_state) => ({ 
         // Don't persist apartments and bookings as they come from API
       }),
     }

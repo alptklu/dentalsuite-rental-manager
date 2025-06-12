@@ -90,7 +90,7 @@ const ApartmentsPage = () => {
           title: "Apartment deleted",
           description: "The apartment has been removed successfully.",
         });
-      } catch (error) {
+      } catch {
         toast({
           title: "Error",
           description: "Failed to delete apartment. Please try again.",
@@ -117,7 +117,7 @@ const ApartmentsPage = () => {
       }
       setShowForm(false);
       setEditingApartment(null);
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: `Failed to ${editingApartment ? 'update' : 'create'} apartment. Please try again.`,
@@ -140,7 +140,7 @@ const ApartmentsPage = () => {
           description: `${apartment.name} has been ${apartment.isFavorite ? 'removed from' : 'added to'} favorites.`,
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to update favorite status. Please try again.",
@@ -156,7 +156,7 @@ const ApartmentsPage = () => {
         title: "Data refreshed",
         description: "All data has been refreshed from the server.",
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to refresh data. Please try again.",

@@ -13,7 +13,13 @@ services:
         value: 10000
       - key: JWT_SECRET
         generateValue: true
-    disk:
-      name: sqlite-data
-      mountPath: /opt/render/project/src/server/data
-      sizeGB: 1 
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dentalsuite-db
+          property: connectionString
+
+databases:
+  - name: dentalsuite-db
+    databaseName: dentalsuite
+    user: dentalsuite_user
+    plan: free 

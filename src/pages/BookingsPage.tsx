@@ -67,7 +67,7 @@ const BookingsPage = () => {
           title: "Booking deleted",
           description: "The booking has been removed successfully.",
         });
-      } catch (error) {
+      } catch {
         toast({
           title: "Error",
           description: "Failed to delete booking. Please try again.",
@@ -94,7 +94,7 @@ const BookingsPage = () => {
       }
       setShowForm(false);
       setEditingBooking(null);
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: `Failed to ${editingBooking ? 'update' : 'create'} booking. Please try again.`,
@@ -113,7 +113,7 @@ const BookingsPage = () => {
         title: "Success",
         description: `${bookings.length} bookings have been added`,
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to import some bookings. Please try again.",
@@ -145,7 +145,7 @@ const BookingsPage = () => {
           description: "Apartment assignment updated successfully.",
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to update assignment. Please try again.",

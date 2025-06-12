@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BookingList } from '@/components/BookingList';
 import { useAppStore } from '@/store';
 import { Layout } from '@/components/Layout';
-import { Booking, Apartment } from '@/types';
+import { Booking } from '@/types';
 import {
   Dialog,
   DialogContent,
@@ -83,7 +83,7 @@ const AssignPage = () => {
           return;
         }
         setSelectedBooking(null);
-      } catch (error) {
+      } catch {
         toast({
           title: "Assignment failed",
           description: "Failed to assign apartment. Please try again.",

@@ -21,8 +21,4 @@ else
     ls -la
 fi
 
-# Create data directory for SQLite
-echo "Creating data directory..."
-mkdir -p server/data
-
 echo "Build completed successfully!" 

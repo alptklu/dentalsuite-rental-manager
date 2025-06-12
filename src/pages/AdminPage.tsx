@@ -35,7 +35,6 @@ import {
 } from '@/components/ui/dialog';
 import { 
   Users, 
-  Shield, 
   Database, 
   Download, 
   Upload, 

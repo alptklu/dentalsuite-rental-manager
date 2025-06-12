@@ -30,7 +30,7 @@ export function Layout({ children }: LayoutProps) {
         title: "Logged out",
         description: "You have been successfully logged out.",
       });
-    } catch (error) {
+    } catch {
       toast({
         title: "Logout error",
         description: "There was an error logging out. Please try again.",

@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, differenceInDays, addDays, parseISO } from 'date-fns';
+import { format, differenceInDays, addDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Apartment, Booking } from '@/types';
