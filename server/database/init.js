@@ -7,7 +7,15 @@ const { Pool } = pkg;
 // Create PostgreSQL connection pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  max: 20, // Maximum number of clients in the pool
+  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+  connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
+});
+
+// Add event listeners for pool errors
+pool.on('error', (err, client) => {
+  console.error('Unexpected error on idle client', err);
 });
 
 // Helper function to execute queries
@@ -16,6 +24,9 @@ export const query = async (text, params) => {
   try {
     const result = await client.query(text, params);
     return result;
+  } catch (error) {
+    console.error('Query error:', error);
+    throw error;
   } finally {
     client.release();
   }
