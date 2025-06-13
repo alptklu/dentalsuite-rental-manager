@@ -5,8 +5,6 @@ import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Pool } from 'pg';
-import { db } from './database/init.js';
 
 import authRoutes from './routes/auth.js';
 import apartmentRoutes from './routes/apartments.js';
@@ -61,39 +59,7 @@ const limiter = rateLimit({
   max: 100, // limit each IP to 100 requests per windowMs
   message: 'Too many requests from this IP, please try again later.'
 });
-
-// Apply rate limiting to all routes except health check
-app.use('/api(?!/health)', limiter);
-
-// Health check endpoint (no rate limiting)
-app.get('/api/health', (req, res) => {
-  console.log(`Health check request received at ${new Date().toISOString()}`);
-  
-  // Quick DB check using existing pool
-  db.query('SELECT 1')
-    .then(() => {
-      const response = { 
-        status: 'OK', 
-        timestamp: new Date().toISOString(),
-        database: 'connected',
-        uptime: process.uptime(),
-        memory: process.memoryUsage()
-      };
-      console.log('Health check succeeded:', response);
-      res.json(response);
-    })
-    .catch(err => {
-      console.error('Health check DB error:', err);
-      res.status(503).json({ 
-        status: 'ERROR',
-        timestamp: new Date().toISOString(),
-        database: 'disconnected',
-        error: err.message,
-        uptime: process.uptime(),
-        memory: process.memoryUsage()
-      });
-    });
-});
+app.use('/api', limiter);
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -105,6 +71,11 @@ app.use('/api/apartments', authenticateToken, apartmentRoutes);
 app.use('/api/bookings', authenticateToken, bookingRoutes);
 app.use('/api/backup', authenticateToken, backupRoutes);
 app.use('/api/users', authenticateToken, userRoutes);
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
