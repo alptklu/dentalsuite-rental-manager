@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Pool } from 'pg';
-import { pool as db } from './database/init.js';
+import { db } from './database/init.js';
 
 import authRoutes from './routes/auth.js';
 import apartmentRoutes from './routes/apartments.js';
