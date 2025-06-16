@@ -10,7 +10,9 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
   max: 20, // Maximum number of clients in the pool
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
+  connectionTimeoutMillis: 500, // Return an error after 500ms if connection could not be established
+  keepAlive: true, // Enable keep-alive
+  keepAliveInitialDelayMillis: 10000 // Wait 10 seconds before initiating keep-alive
 });
 
 // Add error handler for the pool
@@ -20,14 +22,15 @@ pool.on('error', (err, client) => {
 
 // Helper function to execute queries
 export const query = async (text, params) => {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     const start = Date.now();
     const result = await client.query(text, params);
     const duration = Date.now() - start;
     
-    // Log slow queries (over 200ms)
-    if (duration > 200) {
+    // Log slow queries (over 100ms)
+    if (duration > 100) {
       console.warn('Slow query:', { text, duration, rows: result.rowCount });
     }
     
@@ -38,7 +41,9 @@ export const query = async (text, params) => {
     console.error('Parameters:', params);
     throw error;
   } finally {
-    client.release(true); // Force release the client back to the pool
+    if (client) {
+      client.release(true); // Force release the client back to the pool
+    }
   }
 };
 
